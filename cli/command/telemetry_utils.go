@@ -10,8 +10,11 @@ import (
 	"github.com/moby/term"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
+	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/metric"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // BaseCommandAttributes returns an attribute.Set containing attributes to attach to metrics/traces
@@ -54,11 +57,32 @@ func (cli *DockerCli) InstrumentCobraCommands(cmd *cobra.Command, mp metric.Mete
 			cmd.Run = nil
 		}
 		cmd.RunE = func(cmd *cobra.Command, args []string) error {
+			// start tracing the command execution
+			ctx, span := otel.Tracer("").Start(
+				cmd.Context(),
+				strings.Join([]string{"docker", getCommandName(cmd)}, " "),
+				// TODO(krissetto): Is this useful? Shall we set a semantic convention here?
+				trace.WithAttributes(attribute.String("command.type", "Cobra RunE")),
+			)
+			defer span.End()
+			cmd.SetContext(ctx)
+			_ = cli.Apply(WithBaseContext(ctx))
+
 			// start the timer as the first step of every cobra command
 			baseAttrs := BaseCommandAttributes(cmd, cli)
 			stopCobraCmdTimer := startCobraCommandTimer(cmd, meter, baseAttrs)
+
 			cmdErr := ogRunE(cmd, args)
+
 			stopCobraCmdTimer(cmdErr)
+
+			if cmdErr != nil {
+				span.RecordError(cmdErr)
+				span.SetStatus(codes.Error, cmdErr.Error())
+			} else {
+				span.SetStatus(codes.Ok, "RunE executed successfully")
+			}
+
 			return cmdErr
 		}
 

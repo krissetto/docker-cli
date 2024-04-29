@@ -25,6 +25,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/codes"
 )
 
 func main() {
@@ -311,11 +312,23 @@ func runDocker(ctx context.Context, dockerCli *command.DockerCli) error {
 	mp := dockerCli.MeterProvider(ctx)
 	defer mp.Shutdown(ctx)
 	otel.SetMeterProvider(mp)
+
+	tp := dockerCli.TracerProvider(ctx)
+	defer tp.Shutdown(ctx)
+	otel.SetTracerProvider(tp)
+
+	ctx, span := otel.Tracer("").Start(ctx, "runDocker")
+	defer span.End()
+
+	cmd.SetContext(ctx)
+
 	dockerCli.InstrumentCobraCommands(cmd, mp)
 
 	var envs []string
 	args, os.Args, envs, err = processAliases(dockerCli, cmd, args, os.Args)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return err
 	}
 
@@ -325,6 +338,8 @@ func runDocker(ctx context.Context, dockerCli *command.DockerCli) error {
 		// a significant performance hit.
 		err = pluginmanager.AddPluginCommandStubs(dockerCli, cmd)
 		if err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
 			return err
 		}
 	}
@@ -345,6 +360,8 @@ func runDocker(ctx context.Context, dockerCli *command.DockerCli) error {
 				// For plugin not found we fall through to
 				// cmd.Execute() which deals with reporting
 				// "command not found" in a consistent way.
+				span.RecordError(err)
+				span.SetStatus(codes.Error, err.Error())
 				return err
 			}
 		}
@@ -353,7 +370,14 @@ func runDocker(ctx context.Context, dockerCli *command.DockerCli) error {
 	// We've parsed global args already, so reset args to those
 	// which remain.
 	cmd.SetArgs(args)
-	err = cmd.ExecuteContext(ctx)
+	err = cmd.Execute()
+
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+	} else {
+		span.SetStatus(codes.Ok, "command executed successfully")
+	}
 
 	// If the command is being executed in an interactive terminal
 	// and hook are enabled, run the plugin hooks.
