@@ -225,10 +225,12 @@ func setValidateArgs(dockerCli command.Cli, cmd *cobra.Command) {
 }
 
 func tryPluginRun(dockerCli command.Cli, cmd *cobra.Command, subcommand string, envs []string) error {
-	plugincmd, err := pluginmanager.PluginRunCommand(dockerCli, subcommand, cmd)
+	pluginRuncmd, err := pluginmanager.PluginRunCommand(dockerCli, subcommand, cmd)
 	if err != nil {
 		return err
 	}
+
+	plugincmd := command.InstrumentPluginCommand(cmd.Context(), pluginRuncmd, dockerCli)
 
 	// Establish the plugin socket, adding it to the environment under a
 	// well-known key if successful.
@@ -311,7 +313,17 @@ func runDocker(ctx context.Context, dockerCli *command.DockerCli) error {
 	mp := dockerCli.MeterProvider(ctx)
 	defer mp.Shutdown(ctx)
 	otel.SetMeterProvider(mp)
-	dockerCli.InstrumentCobraCommands(cmd, mp)
+
+	tp := dockerCli.TracerProvider(ctx)
+	defer tp.Shutdown(ctx)
+	otel.SetTracerProvider(tp)
+
+	ctx, span := otel.Tracer("").Start(ctx, "runDocker")
+	defer span.End()
+
+	cmd.SetContext(ctx)
+
+	dockerCli.InstrumentCobraCommands(cmd)
 
 	var envs []string
 	args, os.Args, envs, err = processAliases(dockerCli, cmd, args, os.Args)
