@@ -3,6 +3,7 @@ package command
 import (
 	"context"
 	"fmt"
+	"os/exec"
 	"strings"
 	"time"
 
@@ -84,6 +85,57 @@ func startCobraCommandTimer(cmd *cobra.Command, attrs []attribute.KeyValue) func
 	}
 }
 
+// basePluginCommandAttributes returns a slice of attribute.KeyValue to attach to metrics/traces
+func basePluginCommandAttributes(plugincmd *exec.Cmd, streams Streams) []attribute.KeyValue {
+	pluginPath := strings.Split(plugincmd.Path, "-")
+	pluginName := pluginPath[len(pluginPath)-1]
+	return append([]attribute.KeyValue{
+		attribute.String("plugin.name", pluginName),
+	}, stdioAttributes(streams)...)
+}
+
+// wrappedCmd is used to wrap an exec.Cmd in order to instrument the
+// command with otel by using the TimedRun() func
+type wrappedCmd struct {
+	*exec.Cmd
+
+	baseAttrs []attribute.KeyValue
+}
+
+// TimedRun measures the duration of the command execution using and otel meter
+func (c *wrappedCmd) TimedRun(ctx context.Context) error {
+	stopPluginCommandTimer := startPluginCommandTimer(ctx, c.baseAttrs)
+	err := c.Cmd.Run()
+	stopPluginCommandTimer(err)
+	return err
+}
+
+// InstrumentPluginCommand instruments the plugin's exec.Cmd to measure it's execution time
+// Execute the returned command with TimedRun() to record the execution time.
+func InstrumentPluginCommand(plugincmd *exec.Cmd, cli Cli) *wrappedCmd {
+	baseAttrs := basePluginCommandAttributes(plugincmd, cli)
+	newCmd := &wrappedCmd{Cmd: plugincmd, baseAttrs: baseAttrs}
+	return newCmd
+}
+
+func startPluginCommandTimer(ctx context.Context, attrs []attribute.KeyValue) func(err error) {
+	durationCounter, _ := getDefaultMeter().Float64Counter(
+		"plugin.command.time",
+		metric.WithDescription("Measures the duration of the plugin execution"),
+		metric.WithUnit("ms"),
+	)
+	start := time.Now()
+
+	return func(err error) {
+		duration := float64(time.Since(start)) / float64(time.Millisecond)
+		pluginStatusAttrs := attributesFromPluginError(err)
+		durationCounter.Add(ctx, duration,
+			metric.WithAttributes(attrs...),
+			metric.WithAttributes(pluginStatusAttrs...),
+		)
+	}
+}
+
 func stdioAttributes(streams Streams) []attribute.KeyValue {
 	// we don't wrap stderr, but we do wrap in/out
 	_, stderrTty := term.GetFdInfo(streams.Err())
@@ -111,6 +163,27 @@ func attributesFromCommandError(err error) []attribute.KeyValue {
 		attrs = append(attrs, attribute.String("command.error.type", otelErrorType(err)))
 	}
 	attrs = append(attrs, attribute.Int("command.status.code", exitCode))
+
+	return attrs
+}
+
+// Used to create attributes from an error.
+// The error is expected to be returned from the execution of a plugin
+func attributesFromPluginError(err error) []attribute.KeyValue {
+	attrs := []attribute.KeyValue{}
+	exitCode := 0
+	if err != nil {
+		exitCode = 1
+		if stderr, ok := err.(statusError); ok {
+			// StatusError should only be used for errors, and all errors should
+			// have a non-zero exit status, so only set this here if this value isn't 0
+			if stderr.StatusCode != 0 {
+				exitCode = stderr.StatusCode
+			}
+		}
+		attrs = append(attrs, attribute.String("plugin.error.type", otelErrorType(err)))
+	}
+	attrs = append(attrs, attribute.Int("plugin.status.code", exitCode))
 
 	return attrs
 }
