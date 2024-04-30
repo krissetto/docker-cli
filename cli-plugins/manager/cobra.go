@@ -90,11 +90,12 @@ func AddPluginCommandStubs(dockerCli command.Cli, rootCmd *cobra.Command) (err e
 					cargs = append(cargs, args...)
 					cargs = append(cargs, toComplete)
 					os.Args = cargs
-					runCommand, runErr := PluginRunCommand(dockerCli, p.Name, cmd)
+					pluginRunCommand, runErr := PluginRunCommand(dockerCli, p.Name, cmd)
 					if runErr != nil {
 						return nil, cobra.ShellCompDirectiveError
 					}
-					runErr = runCommand.Run()
+					runCommand := command.InstrumentPluginCommand(pluginRunCommand, dockerCli)
+					runErr = runCommand.TimedRun(cmd.Context())
 					if runErr == nil {
 						os.Exit(0) // plugin already rendered complete data
 					}
