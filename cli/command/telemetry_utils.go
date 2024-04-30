@@ -10,12 +10,13 @@ import (
 	"github.com/moby/term"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
+	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
 )
 
-// BaseCommandAttributes returns an attribute.Set containing attributes to attach to metrics/traces
-func BaseCommandAttributes(cmd *cobra.Command, streams Streams) []attribute.KeyValue {
+// baseCommandAttributes returns an attribute.Set containing attributes to attach to metrics/traces
+func baseCommandAttributes(cmd *cobra.Command, streams Streams) []attribute.KeyValue {
 	return append([]attribute.KeyValue{
 		attribute.String("command.name", getCommandName(cmd)),
 	}, stdioAttributes(streams)...)
@@ -23,11 +24,9 @@ func BaseCommandAttributes(cmd *cobra.Command, streams Streams) []attribute.KeyV
 
 // InstrumentCobraCommands wraps all cobra commands' RunE funcs to set a command duration metric using otel.
 //
-// Note: this should be the last func to wrap/modify the PersistentRunE/RunE funcs before command execution.
-//
-// can also be used for spans!
-func (cli *DockerCli) InstrumentCobraCommands(cmd *cobra.Command, mp metric.MeterProvider) {
-	meter := getDefaultMeter(mp)
+// Note: this should be the last func to wrap/modify the PersistentRunE/RunE funcs
+// before command execution for more accurate measurements.
+func (cli *DockerCli) InstrumentCobraCommands(cmd *cobra.Command) {
 	// If PersistentPreRunE is nil, make it execute PersistentPreRun and return nil by default
 	ogPersistentPreRunE := cmd.PersistentPreRunE
 	if ogPersistentPreRunE == nil {
@@ -55,8 +54,8 @@ func (cli *DockerCli) InstrumentCobraCommands(cmd *cobra.Command, mp metric.Mete
 		}
 		cmd.RunE = func(cmd *cobra.Command, args []string) error {
 			// start the timer as the first step of every cobra command
-			baseAttrs := BaseCommandAttributes(cmd, cli)
-			stopCobraCmdTimer := startCobraCommandTimer(cmd, meter, baseAttrs)
+			baseAttrs := baseCommandAttributes(cmd, cli)
+			stopCobraCmdTimer := startCobraCommandTimer(cmd, baseAttrs)
 			cmdErr := ogRunE(cmd, args)
 			stopCobraCmdTimer(cmdErr)
 			return cmdErr
@@ -66,9 +65,9 @@ func (cli *DockerCli) InstrumentCobraCommands(cmd *cobra.Command, mp metric.Mete
 	}
 }
 
-func startCobraCommandTimer(cmd *cobra.Command, meter metric.Meter, attrs []attribute.KeyValue) func(err error) {
+func startCobraCommandTimer(cmd *cobra.Command, attrs []attribute.KeyValue) func(err error) {
 	ctx := cmd.Context()
-	durationCounter, _ := meter.Float64Counter(
+	durationCounter, _ := getDefaultMeter().Float64Counter(
 		"command.time",
 		metric.WithDescription("Measures the duration of the cobra command"),
 		metric.WithUnit("ms"),
@@ -77,7 +76,7 @@ func startCobraCommandTimer(cmd *cobra.Command, meter metric.Meter, attrs []attr
 
 	return func(err error) {
 		duration := float64(time.Since(start)) / float64(time.Millisecond)
-		cmdStatusAttrs := attributesFromError(err)
+		cmdStatusAttrs := attributesFromCommandError(err)
 		durationCounter.Add(ctx, duration,
 			metric.WithAttributes(attrs...),
 			metric.WithAttributes(cmdStatusAttrs...),
@@ -95,7 +94,9 @@ func stdioAttributes(streams Streams) []attribute.KeyValue {
 	}
 }
 
-func attributesFromError(err error) []attribute.KeyValue {
+// Used to create attributes from an error.
+// The error is expected to be returned from the execution of a cobra command
+func attributesFromCommandError(err error) []attribute.KeyValue {
 	attrs := []attribute.KeyValue{}
 	exitCode := 0
 	if err != nil {
@@ -158,9 +159,9 @@ func getFullCommandName(cmd *cobra.Command) string {
 }
 
 // getDefaultMeter gets the default metric.Meter for the application
-// using the given metric.MeterProvider
-func getDefaultMeter(mp metric.MeterProvider) metric.Meter {
-	return mp.Meter(
+// using the global metric.MeterProvider
+func getDefaultMeter() metric.Meter {
+	return otel.Meter(
 		"github.com/docker/cli",
 		metric.WithInstrumentationVersion(version.Version),
 	)
