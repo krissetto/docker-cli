@@ -107,12 +107,6 @@ func AddPluginCommandStubs(dockerCli command.Cli, rootCmd *cobra.Command) (err e
 	return err
 }
 
-const (
-	dockerCliAttributePrefix = attribute.Key("docker.cli")
-
-	cobraCommandPath = attribute.Key("cobra.command_path")
-)
-
 func getPluginResourceAttributes(cmd *cobra.Command, plugin Plugin) attribute.Set {
 	commandPath := cmd.Annotations[CommandAnnotationPluginCommandPath]
 	if commandPath == "" {
@@ -120,14 +114,14 @@ func getPluginResourceAttributes(cmd *cobra.Command, plugin Plugin) attribute.Se
 	}
 
 	attrSet := attribute.NewSet(
-		cobraCommandPath.String(commandPath),
+		command.CobraCommandPath.String(commandPath),
 	)
 
 	kvs := make([]attribute.KeyValue, 0, attrSet.Len())
 	for iter := attrSet.Iter(); iter.Next(); {
 		attr := iter.Attribute()
 		kvs = append(kvs, attribute.KeyValue{
-			Key:   dockerCliAttributePrefix + "." + attr.Key,
+			Key:   command.DockerCliAttributePrefix + "." + attr.Key,
 			Value: attr.Value,
 		})
 	}
@@ -143,7 +137,7 @@ func appendPluginResourceAttributesEnvvar(env []string, cmd *cobra.Command, plug
 			i, v := iter.IndexedAttribute()
 			attrsSlice[i] = string(v.Key) + "=" + url.PathEscape(v.Value.AsString())
 		}
-		env = append(env, ResourceAttributesEnvvar+"="+strings.Join(attrsSlice, ","))
+		env = append(env, command.ResourceAttributesEnvvar+"="+strings.Join(attrsSlice, ","))
 	}
 	return env
 }

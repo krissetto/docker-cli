@@ -9,6 +9,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/docker/cli/cli/command"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 )
@@ -114,7 +115,7 @@ func (p *Plugin) RunHook(ctx context.Context, hookData HookPluginData) ([]byte, 
 
 	pCmd := exec.CommandContext(ctx, p.Path, p.Name, HookSubcommandName, string(hDataBytes))
 	pCmd.Env = os.Environ()
-	pCmd.Env = append(pCmd.Env, ReexecEnvvar+"="+os.Args[0])
+	pCmd.Env = append(pCmd.Env, command.ReexecEnvvar+"="+os.Args[0])
 	hookCmdOutput, err := pCmd.Output()
 	if err != nil {
 		return nil, wrapAsPluginError(err, "failed to execute plugin hook subcommand")

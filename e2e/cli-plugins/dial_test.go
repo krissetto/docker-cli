@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/docker/cli/cli-plugins/manager"
+	"github.com/docker/cli/cli/command"
 	"gotest.tools/v3/assert"
 	is "gotest.tools/v3/assert/cmp"
 	"gotest.tools/v3/icmd"
@@ -23,7 +23,7 @@ func TestCLIPluginDialStdio(t *testing.T) {
 	// the connhelper stuff.
 	helloworld := filepath.Join(os.Getenv("DOCKER_CLI_E2E_PLUGINS_EXTRA_DIRS"), "docker-helloworld")
 	cmd := icmd.Command(helloworld, "--config=blah", "--log-level", "debug", "helloworld", "--who=foo")
-	res := icmd.RunCmd(cmd, icmd.WithEnv(manager.ReexecEnvvar+"=/bin/true"))
+	res := icmd.RunCmd(cmd, icmd.WithEnv(command.ReexecEnvvar+"=/bin/true"))
 	res.Assert(t, icmd.Success)
 	assert.Assert(t, is.Contains(res.Stderr(), `msg="commandconn: starting /bin/true with [--config=blah --log-level debug system dial-stdio]"`))
 	assert.Assert(t, is.Equal(res.Stdout(), "Hello foo!\n"))

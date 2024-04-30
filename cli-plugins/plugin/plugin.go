@@ -92,7 +92,7 @@ func Run(makeCmd func(command.Cli) *cobra.Command, meta manager.Metadata) {
 func withPluginClientConn(name string) command.CLIOption {
 	return command.WithInitializeClient(func(dockerCli *command.DockerCli) (client.APIClient, error) {
 		cmd := "docker"
-		if x := os.Getenv(manager.ReexecEnvvar); x != "" {
+		if x := os.Getenv(command.ReexecEnvvar); x != "" {
 			cmd = x
 		}
 		var flags []string
@@ -181,7 +181,7 @@ func newMetadataSubcommand(plugin *cobra.Command, meta manager.Metadata) *cobra.
 
 // RunningStandalone tells a CLI plugin it is run standalone by direct execution
 func RunningStandalone() bool {
-	if os.Getenv(manager.ReexecEnvvar) != "" {
+	if os.Getenv(command.ReexecEnvvar) != "" {
 		return false
 	}
 	return len(os.Args) < 2 || os.Args[1] != manager.MetadataSubcommandName

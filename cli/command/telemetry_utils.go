@@ -3,6 +3,7 @@ package command
 import (
 	"context"
 	"fmt"
+	"os"
 	"os/exec"
 	"strings"
 	"time"
@@ -14,6 +15,26 @@ import (
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
+)
+
+const (
+	// ReexecEnvvar is the name of an ennvar which is set to the command
+	// used to originally invoke the docker CLI when executing a
+	// plugin. Assuming $PATH and $CWD remain unchanged this should allow
+	// the plugin to re-execute the original CLI.
+	ReexecEnvvar = "DOCKER_CLI_PLUGIN_ORIGINAL_CLI_COMMAND"
+
+	// ResourceAttributesEnvvar is the name of the envvar that includes additional
+	// resource attributes for OTEL.
+	ResourceAttributesEnvvar = "OTEL_RESOURCE_ATTRIBUTES"
+
+	// DockerCliAttributePrefix is the attribute key prefix to use
+	// for values coming from the docker cli
+	DockerCliAttributePrefix = attribute.Key("docker.cli")
+
+	// CobraCommandPath is the attribute key suffix used to represent
+	// the path of the cobra command launched
+	CobraCommandPath = attribute.Key("cobra.command_path")
 )
 
 // baseCommandAttributes returns an attribute.Set containing attributes to attach to metrics/traces
@@ -56,6 +77,12 @@ func (cli *DockerCli) InstrumentCobraCommands(cmd *cobra.Command) {
 		cmd.RunE = func(cmd *cobra.Command, args []string) error {
 			// start the timer as the first step of every cobra command
 			baseAttrs := baseCommandAttributes(cmd, cli)
+			if e, ok := os.LookupEnv(ReexecEnvvar); ok && e != "" {
+				baseAttrs = append(baseAttrs, attribute.KeyValue{
+					Key:   DockerCliAttributePrefix + "." + CobraCommandPath,
+					Value: attribute.StringValue(e),
+				})
+			}
 			stopCobraCmdTimer := startCobraCommandTimer(cmd, baseAttrs)
 			cmdErr := ogRunE(cmd, args)
 			stopCobraCmdTimer(cmdErr)

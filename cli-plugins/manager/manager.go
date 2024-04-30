@@ -17,18 +17,6 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-const (
-	// ReexecEnvvar is the name of an ennvar which is set to the command
-	// used to originally invoke the docker CLI when executing a
-	// plugin. Assuming $PATH and $CWD remain unchanged this should allow
-	// the plugin to re-execute the original CLI.
-	ReexecEnvvar = "DOCKER_CLI_PLUGIN_ORIGINAL_CLI_COMMAND"
-
-	// ResourceAttributesEnvvar is the name of the envvar that includes additional
-	// resource attributes for OTEL.
-	ResourceAttributesEnvvar = "OTEL_RESOURCE_ATTRIBUTES"
-)
-
 // errPluginNotFound is the error returned when a plugin could not be found.
 type errPluginNotFound string
 
@@ -240,7 +228,7 @@ func PluginRunCommand(dockerCli command.Cli, name string, rootcmd *cobra.Command
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
 
-		cmd.Env = append(cmd.Environ(), ReexecEnvvar+"="+os.Args[0])
+		cmd.Env = append(cmd.Environ(), command.ReexecEnvvar+"="+os.Args[0])
 		cmd.Env = appendPluginResourceAttributesEnvvar(cmd.Env, rootcmd, plugin)
 
 		return cmd, nil
