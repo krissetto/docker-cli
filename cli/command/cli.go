@@ -283,10 +283,6 @@ func (cli *DockerCli) Initialize(opts *cliflags.ClientOptions, ops ...CLIOption)
 		},
 	}
 
-	// TODO(krissetto): pass ctx to the funcs instead of using this
-	cli.createGlobalMeterProvider(cli.baseCtx)
-	cli.createGlobalTracerProvider(cli.baseCtx)
-
 	return nil
 }
 

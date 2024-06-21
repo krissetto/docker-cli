@@ -112,26 +112,24 @@ func (r *telemetryResource) init() {
 	r.opts = nil
 }
 
-// createGlobalMeterProvider creates a new MeterProvider from the initialized DockerCli struct
-// with the given options and sets it as the global meter provider
-func (cli *DockerCli) createGlobalMeterProvider(ctx context.Context, opts ...sdkmetric.Option) {
+// CreateMeterProvider creates a new MeterProvider from the initialized DockerCli struct
+// with the given options
+func (cli *DockerCli) CreateMeterProvider(ctx context.Context, opts ...sdkmetric.Option) metric.MeterProvider {
 	allOpts := make([]sdkmetric.Option, 0, len(opts)+2)
 	allOpts = append(allOpts, sdkmetric.WithResource(cli.Resource()))
 	allOpts = append(allOpts, dockerMetricExporter(ctx, cli)...)
 	allOpts = append(allOpts, opts...)
-	mp := sdkmetric.NewMeterProvider(allOpts...)
-	otel.SetMeterProvider(mp)
+	return sdkmetric.NewMeterProvider(allOpts...)
 }
 
-// createGlobalTracerProvider creates a new TracerProvider from the initialized DockerCli struct
-// with the given options and sets it as the global tracer provider
-func (cli *DockerCli) createGlobalTracerProvider(ctx context.Context, opts ...sdktrace.TracerProviderOption) {
+// CreateTracerProvider creates a new TracerProvider from the initialized DockerCli struct
+// with the given options
+func (cli *DockerCli) CreateTracerProvider(ctx context.Context, opts ...sdktrace.TracerProviderOption) trace.TracerProvider {
 	allOpts := make([]sdktrace.TracerProviderOption, 0, len(opts)+2)
 	allOpts = append(allOpts, sdktrace.WithResource(cli.Resource()))
 	allOpts = append(allOpts, dockerSpanExporter(ctx, cli)...)
 	allOpts = append(allOpts, opts...)
-	tp := sdktrace.NewTracerProvider(allOpts...)
-	otel.SetTracerProvider(tp)
+	return sdktrace.NewTracerProvider(allOpts...)
 }
 
 func defaultResourceOptions() []resource.Option {

@@ -59,7 +59,8 @@ func RunPlugin(dockerCli *command.DockerCli, plugin *cobra.Command, meta manager
 				cmd.Run = nil
 			}
 			cmd.RunE = func(cmd *cobra.Command, args []string) error {
-				stopInstrumentation := dockerCli.StartInstrumentation(cmd)
+				mp := dockerCli.CreateMeterProvider(cmd.Context())
+				stopInstrumentation := dockerCli.StartInstrumentation(cmd, mp)
 				err := ogRunE(cmd, args)
 				stopInstrumentation(err)
 				return err

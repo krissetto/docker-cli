@@ -25,7 +25,7 @@ func BaseCommandAttributes(cmd *cobra.Command, streams Streams) []attribute.KeyV
 // Note: this should be the last func to wrap/modify the PersistentRunE/RunE funcs before command execution.
 //
 // can also be used for spans!
-func (cli *DockerCli) InstrumentCobraCommands(ctx context.Context, cmd *cobra.Command) {
+func (cli *DockerCli) InstrumentCobraCommands(ctx context.Context, cmd *cobra.Command, mp metric.MeterProvider) {
 	// If PersistentPreRunE is nil, make it execute PersistentPreRun and return nil by default
 	ogPersistentPreRunE := cmd.PersistentPreRunE
 	if ogPersistentPreRunE == nil {
@@ -53,7 +53,7 @@ func (cli *DockerCli) InstrumentCobraCommands(ctx context.Context, cmd *cobra.Co
 		}
 		cmd.RunE = func(cmd *cobra.Command, args []string) error {
 			// start the timer as the first step of every cobra command
-			stopInstrumentation := cli.StartInstrumentation(cmd)
+			stopInstrumentation := cli.StartInstrumentation(cmd, mp)
 			cmdErr := ogRunE(cmd, args)
 			stopInstrumentation(cmdErr)
 			return cmdErr
@@ -67,9 +67,9 @@ func (cli *DockerCli) InstrumentCobraCommands(ctx context.Context, cmd *cobra.Co
 // It's the main command OTel utility, and new command-related metrics should be added to it.
 // It should be called immediately before command execution, and returns a stopInstrumentation function
 // that must be called with the error resulting from the command execution.
-func (cli *DockerCli) StartInstrumentation(cmd *cobra.Command) (stopInstrumentation func(error)) {
+func (cli *DockerCli) StartInstrumentation(cmd *cobra.Command, mp metric.MeterProvider) (stopInstrumentation func(error)) {
 	baseAttrs := BaseCommandAttributes(cmd, cli)
-	return startCobraCommandTimer(cli.MeterProvider(), baseAttrs)
+	return startCobraCommandTimer(mp, baseAttrs)
 }
 
 func startCobraCommandTimer(mp metric.MeterProvider, attrs []attribute.KeyValue) func(err error) {
