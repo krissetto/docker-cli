@@ -1,0 +1,11 @@
+services:
+    docs_generate:
+        build:
+            context: ./docs_generate
+        ports:
+            - 8080:8080
+    man:
+        build:
+            context: ./man
+        ports:
+            - 8081:8080
