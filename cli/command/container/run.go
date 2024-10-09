@@ -25,6 +25,8 @@ type runOptions struct {
 	detach     bool
 	sigProxy   bool
 	detachKeys string
+	// HACKATHON: Add a flag to run the TUI for this command
+	tui bool
 }
 
 // NewRunCommand create a new `docker run` command
@@ -40,6 +42,9 @@ func NewRunCommand(dockerCli command.Cli) *cobra.Command {
 			copts.Image = args[0]
 			if len(args) > 1 {
 				copts.Args = args[1:]
+			}
+			if options.tui {
+				return runTUI()
 			}
 			return runRun(cmd.Context(), dockerCli, cmd.Flags(), &options, copts)
 		},
@@ -60,6 +65,8 @@ func NewRunCommand(dockerCli command.Cli) *cobra.Command {
 	flags.StringVar(&options.detachKeys, "detach-keys", "", "Override the key sequence for detaching a container")
 	flags.StringVar(&options.pull, "pull", PullImageMissing, `Pull image before running ("`+PullImageAlways+`", "`+PullImageMissing+`", "`+PullImageNever+`")`)
 	flags.BoolVarP(&options.quiet, "quiet", "q", false, "Suppress the pull output")
+	// HACKATHON: Add a flag to run the TUI for this command
+	flags.BoolVar(&options.tui, "tui", false, "Run the TUI for this command")
 
 	// Add an explicit help that doesn't have a `-h` to prevent the conflict
 	// with hostname
