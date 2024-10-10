@@ -73,6 +73,7 @@ type runTUIModel struct {
 	editValue         string
 	cursorPosition    int
 	err               error
+	shouldRun         bool
 }
 
 func (m runTUIModel) Init() tea.Cmd {
@@ -141,6 +142,7 @@ func (m runTUIModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case "ctrl+c", "esc":
 				return m, tea.Quit
 			case "enter": // TODO(krissetto): clean this up
+				m.shouldRun = true
 				return m, tea.Quit
 			case "left", "up", "shift+tab":
 				if m.selectedParameter > 0 {
@@ -336,20 +338,20 @@ func getFlags(imageName string) []runFlags {
 	return imageFlagMap[imageName]
 }
 
-func runTUI(ctx context.Context, flags *pflag.FlagSet, ropts *runOptions, copts *containerOptions) (*pflag.FlagSet, *runOptions, *containerOptions, error) {
+func runTUI(ctx context.Context, flags *pflag.FlagSet, ropts *runOptions, copts *containerOptions) (bool, *pflag.FlagSet, *runOptions, *containerOptions, error) {
 	// run bubbletea tui here
 	tuiModel := initialModel(ctx, flags, ropts, copts)
 	tui := tea.NewProgram(tuiModel, tea.WithContext(context.WithoutCancel(ctx)))
 
 	finalModel, err := tui.Run()
 	if err != nil {
-		return nil, nil, nil, err
+		return false, nil, nil, nil, err
 	}
 
 	// Convert the final model back to runTUIModel
 	finalRunTUIModel, ok := finalModel.(runTUIModel)
 	if !ok {
-		return nil, nil, nil, fmt.Errorf("unexpected model type")
+		return false, nil, nil, nil, fmt.Errorf("unexpected model type")
 	}
 
 	// Check if the TUI was exited without an error
@@ -384,7 +386,7 @@ func runTUI(ctx context.Context, flags *pflag.FlagSet, ropts *runOptions, copts 
 	}
 
 	// return values from model
-	return finalRunTUIModel.flags, finalRunTUIModel.ropts, finalRunTUIModel.copts, finalRunTUIModel.err
+	return finalRunTUIModel.shouldRun, finalRunTUIModel.flags, finalRunTUIModel.ropts, finalRunTUIModel.copts, finalRunTUIModel.err
 }
 
 func initialModel(ctx context.Context, flags *pflag.FlagSet, ropts *runOptions, copts *containerOptions) runTUIModel {

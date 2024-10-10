@@ -44,9 +44,12 @@ func NewRunCommand(dockerCli command.Cli) *cobra.Command {
 				copts.Args = args[1:]
 			}
 			if options.tui {
-				flags, opts, contOpts, err := runTUI(cmd.Context(), cmd.Flags(), &options, copts)
+				shouldRun, flags, opts, contOpts, err := runTUI(cmd.Context(), cmd.Flags(), &options, copts)
 				if err != nil {
 					return err
+				}
+				if !shouldRun {
+					return nil
 				}
 				return runRun(cmd.Context(), dockerCli, flags, opts, contOpts)
 			}
