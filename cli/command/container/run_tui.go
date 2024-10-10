@@ -219,10 +219,14 @@ func (m runTUIModel) View() string {
 					afterCursor = m.editValue[m.cursorPosition+1:]
 				}
 				if m.parameterParts != nil {
+					// Fix: Include the entire non-editable part
 					beforeEditedPart = strings.Join(
 						m.parameterParts[:m.runParams[m.selectedParameter].paramType.editableIndex],
 						param.paramType.splitOn,
 					)
+					if m.runParams[m.selectedParameter].paramType.editableIndex > 0 {
+						beforeEditedPart += param.paramType.splitOn
+					}
 					if m.runParams[m.selectedParameter].paramType.editableIndex+1 < len(m.parameterParts) {
 						afterEditedPart = param.paramType.splitOn + strings.Join(
 							m.parameterParts[m.runParams[m.selectedParameter].paramType.editableIndex+1:],
@@ -230,11 +234,11 @@ func (m runTUIModel) View() string {
 					}
 				}
 				// lovely string formatting trash
-				paramStr = fmt.Sprintf("%s %s%s%s%s%s%s%s%s%s%s%s",
+				paramStr = fmt.Sprintf("%s %s%s%s%s%s%s%s%s%s%s%s%s",
 					param.paramType.name,
 					beforeEditedPart,
 					blueColor, beforeCursor,
-					cursorColor, cursorChar,
+					cursorColor, cursorChar, resetColor,
 					blueColor, afterCursor, resetColor,
 					grayColor, afterEditedPart,
 					resetColor)
@@ -306,7 +310,7 @@ func getParamOptions(imageName string) []runParam {
 			},
 			{
 				paramType:    volumeParam,
-				valueOptions: []string{"postgres-data:/some/other/container/dir", "/yet/another/local/dir:/yet/another/container/dir"},
+				valueOptions: []string{"postgres-data:/var/lib/postgres/data", "/yet/another/local/dir:/yet/another/container/dir"},
 			},
 			{
 				paramType:    envVarParam,
@@ -347,6 +351,9 @@ func runTUI(ctx context.Context, flags *pflag.FlagSet, ropts *runOptions, copts 
 	if err != nil {
 		return false, nil, nil, nil, err
 	}
+
+	// Add this line to reset colors
+	fmt.Print("\033[0m")
 
 	// Convert the final model back to runTUIModel
 	finalRunTUIModel, ok := finalModel.(runTUIModel)
